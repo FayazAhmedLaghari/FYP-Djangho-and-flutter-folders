@@ -3,10 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ApiService.dart';
-
+import 'RegistrationScreen.dart';
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
-
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
@@ -15,7 +14,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _questionController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-
+  
   List<dynamic> _documents = [];
   List<dynamic> _queryHistory = [];
   String _answer = '';
@@ -24,11 +23,22 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isProcessing = false;
   bool _isUploading = false;
   bool _isAskingQuestion = false;
+  Map<String, dynamic>? _studentProfile;
+  bool _isLoadingProfile = false;
 
   @override
   void initState() {
     super.initState();
     _checkLoginStatus();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh profile when returning from registration screen
+    if (_isLoggedIn && _studentProfile == null) {
+      _loadStudentProfile();
+    }
   }
 
   Future<void> _checkLoginStatus() async {
@@ -41,6 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (_isLoggedIn) {
         _loadDocuments();
         _loadQueryHistory();
+        _loadStudentProfile();
       }
     } catch (e) {
       print('Error checking login status: $e');
@@ -75,9 +86,24 @@ class _HomeScreenState extends State<HomeScreen> {
         });
         _loadDocuments();
         _loadQueryHistory();
+        _loadStudentProfile();
+        
+        // Show welcome message after a short delay to allow profile to load
+        Future.delayed(Duration(milliseconds: 500), () {
+          if (_studentProfile != null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Welcome back, ${_studentProfile!['first_name'] ?? 'Student'}!'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Login successful')),
         );
+          }
+        });
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result['error'] ?? 'Login failed')),
@@ -101,6 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _documents = [];
         _queryHistory = [];
         _answer = '';
+        _studentProfile = null;
         _usernameController.clear();
         _passwordController.clear();
       });
@@ -162,6 +189,41 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error loading history: $e')),
+      );
+    }
+  }
+
+  Future<void> _loadStudentProfile() async {
+    try {
+      setState(() {
+        _isLoadingProfile = true;
+      });
+
+      final result = await ApiService.getStudentProfile();
+
+      setState(() {
+        _isLoadingProfile = false;
+      });
+
+      if (result['success']) {
+        setState(() {
+          _studentProfile = result['data'];
+        });
+      } else {
+        // Profile not found is not an error for existing users
+        if (!result['error']?.contains('Student profile not found') ?? false) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text(result['error'] ?? 'Failed to load profile')),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isLoadingProfile = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading profile: $e')),
       );
     }
   }
@@ -282,59 +344,299 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildLoginForm() {
-    return Padding(
-      padding: const EdgeInsets.all(20.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            'Chat with PDF',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.blue.shade50,
+              Colors.white,
+              Colors.blue.shade50,
+            ],
           ),
-          SizedBox(height: 30),
-          TextField(
-            controller: _usernameController,
-            decoration: InputDecoration(
-              labelText: 'Username',
-              border: OutlineInputBorder(),
-              filled: true,
-              fillColor: Colors.grey[100],
-            ),
-          ),
-          SizedBox(height: 15),
-          TextField(
-            controller: _passwordController,
-            obscureText: true,
-            decoration: InputDecoration(
-              labelText: 'Password',
-              border: OutlineInputBorder(),
-              filled: true,
-              fillColor: Colors.grey[100],
-            ),
-          ),
-          SizedBox(height: 20),
-          _isLoading
-              ? CircularProgressIndicator()
-              : ElevatedButton(
-                  onPressed: _isLoading ? null : _login,
-                  child: Text('Login'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: Size(double.infinity, 50),
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(height: 40),
+                // App Logo/Icon
+                Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [Colors.blue.shade400, Colors.blue.shade600],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.3),
+                        blurRadius: 20,
+                        offset: Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.school,
+                    size: 60,
+                    color: Colors.white,
                   ),
                 ),
-          SizedBox(height: 10),
-          TextButton(
-            onPressed: () {
-              // Demo credentials hint
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Use your Django admin credentials')),
-              );
-            },
-            child: Text('Forgot credentials?'),
+                SizedBox(height: 30),
+                // Welcome Text
+                Text(
+                  'Welcome Back!',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade800,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Sign in to continue to Chat with PDF',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                SizedBox(height: 40),
+                
+                // Login Form Card
+                Card(
+                  elevation: 8,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Login',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade800,
+                          ),
+                        ),
+                        SizedBox(height: 24),
+                        
+                        // Username Field
+                        TextFormField(
+                          controller: _usernameController,
+                          decoration: InputDecoration(
+                            labelText: 'Username',
+                            hintText: 'Enter your username',
+                            prefixIcon: Icon(Icons.person_outline, color: Colors.blue),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.blue, width: 2),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          ),
+                        ),
+                        SizedBox(height: 20),
+                        
+                        // Password Field
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: true,
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            hintText: 'Enter your password',
+                            prefixIcon: Icon(Icons.lock_outline, color: Colors.blue),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.blue, width: 2),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          ),
+                        ),
+                        SizedBox(height: 16),
+                        
+                        // Forgot Password
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Use your Django admin credentials'),
+                                  backgroundColor: Colors.blue,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            },
+                            child: Text(
+                              'Forgot Password?',
+                              style: TextStyle(
+                                color: Colors.blue.shade600,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 24),
+                        
+                        // Login Button
+                        _isLoading
+                            ? Center(
+                                child: Container(
+                                  padding: EdgeInsets.all(16),
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                width: double.infinity,
+                                height: 56,
+                                child: ElevatedButton(
+                                  onPressed: _isLoading ? null : _login,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    elevation: 3,
+                                    shadowColor: Colors.blue.withOpacity(0.3),
+                                  ),
+                                  child: Text(
+                                    'Sign In',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(height: 24),
+                
+                // Register Section
+                Container(
+                  padding: EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.blue.shade100),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.1),
+                        blurRadius: 10,
+                        offset: Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'New to our platform?',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        height: 50,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => RegistrationScreen()),
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.blue, width: 2),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            foregroundColor: Colors.blue,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.person_add, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'Create Student Account',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 20),
+                
+                // Demo Credentials Info
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.amber.shade700, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Demo: Use your Django admin credentials to login',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.amber.shade800,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 40),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -343,31 +645,101 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       children: [
         AppBar(
-          title: Text('Chat with PDF'),
+          title: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [Colors.white.withOpacity(0.3), Colors.white.withOpacity(0.1)],
+                  ),
+                ),
+                child: Icon(Icons.school, size: 18, color: Colors.white),
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Chat with PDF',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 20,
+                ),
+              ),
+            ],
+          ),
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
+          elevation: 0,
           actions: [
-            IconButton(
-              icon: Icon(Icons.logout),
-              onPressed: _logout,
-              tooltip: 'Logout',
+            Container(
+              margin: EdgeInsets.only(right: 8),
+              child: IconButton(
+                icon: Icon(Icons.logout_rounded),
+                onPressed: _logout,
+                tooltip: 'Logout',
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.white.withOpacity(0.1),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
             ),
           ],
         ),
         Expanded(
           child: DefaultTabController(
-            length: 3,
+            length: 4,
             child: Column(
               children: [
-                TabBar(
-                  tabs: [
-                    Tab(icon: Icon(Icons.chat), text: 'Chat'),
-                    Tab(icon: Icon(Icons.history), text: 'History'),
-                    Tab(icon: Icon(Icons.folder), text: 'Documents'),
-                  ],
-                  labelColor: Colors.blue,
-                  unselectedLabelColor: Colors.grey,
-                  indicatorColor: Colors.blue,
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: TabBar(
+                    tabs: [
+                      Tab(
+                        icon: Icon(Icons.chat_bubble_outline, size: 20),
+                        text: 'Chat',
+                        height: 60,
+                      ),
+                      Tab(
+                        icon: Icon(Icons.history, size: 20),
+                        text: 'History',
+                        height: 60,
+                      ),
+                      Tab(
+                        icon: Icon(Icons.folder_outlined, size: 20),
+                        text: 'Documents',
+                        height: 60,
+                      ),
+                      Tab(
+                        icon: Icon(Icons.person_outline, size: 20),
+                        text: 'Profile',
+                        height: 60,
+                      ),
+                    ],
+                    labelColor: Colors.blue,
+                    unselectedLabelColor: Colors.grey.shade600,
+                    indicatorColor: Colors.blue,
+                    indicatorWeight: 3,
+                    labelStyle: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                    unselectedLabelStyle: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
                 Expanded(
                   child: TabBarView(
@@ -375,6 +747,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       _buildChatTab(),
                       _buildHistoryTab(),
                       _buildDocumentsTab(),
+                      _buildProfileTab(),
                     ],
                   ),
                 ),
@@ -387,56 +760,204 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildChatTab() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _questionController,
-                  decoration: InputDecoration(
-                    labelText: 'Ask a question about your PDFs',
-                    border: OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(Icons.send),
-                      onPressed: _isAskingQuestion ? null : _askQuestion,
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.blue.shade50,
+            Colors.white,
+          ],
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            // Question Input Card
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _questionController,
+                        decoration: InputDecoration(
+                          labelText: 'Ask a question about your PDFs',
+                          hintText: 'Type your question here...',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.blue, width: 2),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                        onSubmitted: (_) => _askQuestion(),
+                        enabled: !_isAskingQuestion,
+                        maxLines: null,
+                      ),
                     ),
-                  ),
-                  onSubmitted: (_) => _askQuestion(),
-                  enabled: !_isAskingQuestion,
+                    SizedBox(width: 12),
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.blue, Colors.blue.shade600],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: IconButton(
+                        icon: Icon(Icons.send_rounded, color: Colors.white),
+                        onPressed: _isAskingQuestion ? null : _askQuestion,
+                        tooltip: 'Send Question',
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-          SizedBox(height: 20),
-          _isAskingQuestion
-              ? Center(child: CircularProgressIndicator())
-              : Expanded(
-                  child: _answer.isNotEmpty
+            ),
+            SizedBox(height: 20),
+            
+            // Answer Section
+            Expanded(
+              child: _isAskingQuestion
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            'Thinking...',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : _answer.isNotEmpty
                       ? Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: SingleChildScrollView(
-                              child: Text(
-                                _answer,
-                                style: TextStyle(fontSize: 16),
+                          elevation: 4,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Colors.white,
+                                  Colors.blue.shade50,
+                                ],
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(20.0),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue,
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Icon(
+                                            Icons.psychology,
+                                            color: Colors.white,
+                                            size: 20,
+                                          ),
+                                        ),
+                                        SizedBox(width: 12),
+                                        Text(
+                                          'AI Response',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue.shade800,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(height: 16),
+                                    Text(
+                                      _answer,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        height: 1.5,
+                                        color: Colors.grey.shade800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         )
                       : Center(
-                          child: Text(
-                            'Ask a question to get started',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey,
-                            ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.blue.shade50,
+                                ),
+                                child: Icon(
+                                  Icons.chat_bubble_outline,
+                                  size: 40,
+                                  color: Colors.blue.shade300,
+                                ),
+                              ),
+                              SizedBox(height: 20),
+                              Text(
+                                'Ask a question to get started',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                'Upload PDF documents and start chatting!',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -575,6 +1096,187 @@ class _HomeScreenState extends State<HomeScreen> {
       return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
     } catch (e) {
       return dateString;
+    }
+  }
+
+  Widget _buildProfileTab() {
+    return RefreshIndicator(
+      onRefresh: _loadStudentProfile,
+      child: _isLoadingProfile
+          ? Center(child: CircularProgressIndicator())
+          : _studentProfile == null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.person_outline,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        'No student profile found',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Please register as a student to view your profile',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => RegistrationScreen()),
+                          );
+                        },
+                        child: Text('Register as Student'),
+                      ),
+                    ],
+                  ),
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 30,
+                                    backgroundColor: Colors.blue,
+                                    child: Text(
+                                      '${_studentProfile!['first_name']?[0] ?? ''}${_studentProfile!['last_name']?[0] ?? ''}',
+                                      style: TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '${_studentProfile!['first_name'] ?? ''} ${_studentProfile!['last_name'] ?? ''}',
+                                          style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        Text(
+                                          _studentProfile!['student_id'] ?? '',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                        Text(
+                                          _studentProfile!['department'] ?? '',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.blue,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Personal Information',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                              SizedBox(height: 16),
+                              _buildProfileRow('Email', _studentProfile!['email'] ?? ''),
+                              _buildProfileRow('Phone', _studentProfile!['phone_number'] ?? ''),
+                              _buildProfileRow('Date of Birth', _formatDate(_studentProfile!['date_of_birth'] ?? '')),
+                              _buildProfileRow('Year of Study', _getYearLabel(_studentProfile!['year_of_study'] ?? 1)),
+                              _buildProfileRow('Registration Date', _formatDate(_studentProfile!['registration_date'] ?? '')),
+                              _buildProfileRow('Status', _studentProfile!['is_active'] == true ? 'Active' : 'Inactive'),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+    );
+  }
+
+  Widget _buildProfileRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[700],
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(fontSize: 16),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getYearLabel(int year) {
+    switch (year) {
+      case 1:
+        return 'First Year';
+      case 2:
+        return 'Second Year';
+      case 3:
+        return 'Third Year';
+      case 4:
+        return 'Fourth Year';
+      case 5:
+        return 'Fifth Year';
+      default:
+        return 'Unknown';
     }
   }
 

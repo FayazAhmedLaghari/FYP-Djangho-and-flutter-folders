@@ -5,7 +5,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-
 class ApiService {
   // ✅ Use the IP that works from your other project
   static const String baseUrl = 'http://192.168.43.11:8000/api/rag/';
@@ -21,7 +20,7 @@ class ApiService {
         print('❌ No authentication token found');
         return null;
       }
-
+      
       return token;
     } catch (e) {
       print('Error getting token: $e');
@@ -345,7 +344,7 @@ class ApiService {
     }
   }
 
-  // Get documents
+  //
   static Future<Map<String, dynamic>> getDocuments() async {
     try {
       final token = await getToken();
@@ -447,5 +446,201 @@ class ApiService {
   static Future<bool> isLoggedIn() async {
     final token = await getToken();
     return token != null;
+  }
+
+  // Student Registration
+  static Future<Map<String, dynamic>> registerStudent({
+    required String username,
+    required String password,
+    required String passwordConfirm,
+    required String studentId,
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phoneNumber,
+    required String dateOfBirth,
+    required String department,
+    required int yearOfStudy,
+  }) async {
+    try {
+      print('📝 Starting student registration...');
+      print('📝 Registration URL: ${baseUrl}register/');
+
+      final response = await http.post(
+        Uri.parse('${baseUrl}register/'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'username': username,
+          'password': password,
+          'password_confirm': passwordConfirm,
+          'student_id': studentId,
+          'first_name': firstName,
+          'last_name': lastName,
+          'email': email,
+          'phone_number': phoneNumber,
+          'date_of_birth': dateOfBirth,
+          'department': department,
+          'year_of_study': yearOfStudy,
+        }),
+      ).timeout(Duration(seconds: 15));
+
+      print('📡 Registration response status: ${response.statusCode}');
+      print('📡 Registration response body: ${response.body}');
+
+      if (response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        print('✅ Student registration successful!');
+        return {'success': true, 'data': data};
+      } else {
+        try {
+          final errorData = jsonDecode(response.body);
+          final errorMsg = errorData['error'] ?? 
+              errorData['details'] ?? 
+              'Registration failed: ${response.statusCode}';
+          print('❌ Registration failed: $errorMsg');
+          return {'success': false, 'error': errorMsg};
+        } catch (e) {
+          print('❌ Registration failed with status: ${response.statusCode}');
+          return {
+            'success': false,
+            'error': 'Registration failed: ${response.statusCode}'
+          };
+        }
+      }
+    } on SocketException catch (e) {
+      print('❌ SocketException: $e');
+      return {
+        'success': false,
+        'error': 'Network error: Cannot connect to registration server'
+      };
+    } on TimeoutException catch (e) {
+      print('❌ TimeoutException: $e');
+      return {
+        'success': false,
+        'error': 'Registration timeout: Server taking too long to respond'
+      };
+    } catch (e) {
+      print('❌ Unexpected registration error: $e');
+      return {'success': false, 'error': 'Unexpected error during registration: $e'};
+    }
+  }
+
+  // Get student profile
+  static Future<Map<String, dynamic>> getStudentProfile() async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {
+          'success': false,
+          'error': 'Not authenticated. Please login again.'
+        };
+      }
+
+      final response = await http.get(
+        Uri.parse('${baseUrl}profile/'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      } else if (response.statusCode == 404) {
+        return {
+          'success': false,
+          'error': 'Student profile not found. Please register first.'
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to fetch profile: ${response.statusCode}'
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'Error fetching profile: $e'};
+    }
+  }
+
+  // Update student profile
+  static Future<Map<String, dynamic>> updateStudentProfile({
+    String? firstName,
+    String? lastName,
+    String? phoneNumber,
+    String? department,
+    int? yearOfStudy,
+  }) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {
+          'success': false,
+          'error': 'Not authenticated. Please login again.'
+        };
+      }
+
+      Map<String, dynamic> updateData = {};
+      if (firstName != null) updateData['first_name'] = firstName;
+      if (lastName != null) updateData['last_name'] = lastName;
+      if (phoneNumber != null) updateData['phone_number'] = phoneNumber;
+      if (department != null) updateData['department'] = department;
+      if (yearOfStudy != null) updateData['year_of_study'] = yearOfStudy;
+
+      final response = await http.put(
+        Uri.parse('${baseUrl}profile/update/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(updateData),
+      ).timeout(Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      } else {
+        try {
+          final errorData = jsonDecode(response.body);
+          return {
+            'success': false,
+            'error': errorData['error'] ?? 'Failed to update profile'
+          };
+        } catch (e) {
+          return {
+            'success': false,
+            'error': 'Failed to update profile: ${response.statusCode}'
+          };
+        }
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'Error updating profile: $e'};
+    }
+  }
+
+  // List all students (for admin purposes)
+  static Future<Map<String, dynamic>> listStudents() async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {
+          'success': false,
+          'error': 'Not authenticated. Please login again.'
+        };
+      }
+
+      final response = await http.get(
+        Uri.parse('${baseUrl}students/'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to fetch students: ${response.statusCode}'
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'Error fetching students: $e'};
+    }
   }
 }

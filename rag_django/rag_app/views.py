@@ -18,8 +18,8 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .models import Document, DocumentChunk, QueryHistory
-from .serializers import DocumentSerializer, QueryHistorySerializer
+from .models import Document, DocumentChunk, QueryHistory, Student
+from .serializers import DocumentSerializer, QueryHistorySerializer, StudentRegistrationSerializer, StudentSerializer
 from django.db import DatabaseError
 from django.core.exceptions import ObjectDoesNotExist
 import requests
@@ -399,4 +399,98 @@ def test_pdf_processing(request):
             "success": False,
             "error": str(e),
             "traceback": error_trace
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# Student Registration Views
+@api_view(['POST'])
+@permission_classes([])  # No authentication required for registration
+def student_register(request):
+    """
+    Register a new student
+    """
+    try:
+        serializer = StudentRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            student = serializer.save()
+            return Response({
+                "message": "Student registered successfully",
+                "student": StudentSerializer(student).data
+            }, status=status.HTTP_201_CREATED)
+        else:
+            return Response({
+                "error": "Registration failed",
+                "details": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            "error": "Registration failed",
+            "details": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_student_profile(request):
+    """
+    Get current student's profile
+    """
+    try:
+        if hasattr(request.user, 'student_profile'):
+            student = request.user.student_profile
+            serializer = StudentSerializer(student)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                "error": "Student profile not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            "error": "Failed to retrieve profile",
+            "details": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_student_profile(request):
+    """
+    Update current student's profile
+    """
+    try:
+        if hasattr(request.user, 'student_profile'):
+            student = request.user.student_profile
+            serializer = StudentSerializer(student, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    "message": "Profile updated successfully",
+                    "student": serializer.data
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    "error": "Update failed",
+                    "details": serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response({
+                "error": "Student profile not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            "error": "Failed to update profile",
+            "details": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_students(request):
+    """
+    List all students (admin only - you might want to add admin permission check)
+    """
+    try:
+        students = Student.objects.filter(is_active=True)
+        serializer = StudentSerializer(students, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            "error": "Failed to retrieve students",
+            "details": str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
