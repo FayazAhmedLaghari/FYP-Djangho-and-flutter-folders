@@ -1,10 +1,10 @@
 // ignore_for_file: prefer_const_constructors
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
 class ApiService {
   // ✅ Use the IP that works from your other project
   static const String baseUrl = 'http://192.168.43.11:8000/api/rag/';
@@ -20,7 +20,7 @@ class ApiService {
         print('❌ No authentication token found');
         return null;
       }
-      
+
       return token;
     } catch (e) {
       print('Error getting token: $e');
@@ -302,9 +302,9 @@ class ApiService {
       return {'success': false, 'error': 'Upload failed: $e'};
     }
   }
-
-  // Ask question
-  static Future<Map<String, dynamic>> askQuestion(String question) async {
+  // Ask question (with longer timeout and token refresh retry)
+  static Future<Map<String, dynamic>> askQuestion(String question,
+      {bool isRetry = false}) async {
     try {
       final token = await getToken();
       if (token == null) {
@@ -323,22 +323,67 @@ class ApiService {
             },
             body: jsonEncode({'question': question}),
           )
-          .timeout(Duration(seconds: 15));
+          // Increase timeout to handle LLM/vector search processing time
+          .timeout(Duration(minutes: 2));
+
+      // Handle HTML error pages gracefully
+      if (response.body.trim().startsWith('<!DOCTYPE') ||
+          response.body.trim().startsWith('<html>')) {
+        return {
+          'success': false,
+          'error': 'Server error. Please check Django logs.'
+        };
+      }
 
       if (response.statusCode == 200) {
-        return {'success': true, 'data': jsonDecode(response.body)};
-      } else if (response.statusCode == 401) {
+        try {
+          final data = jsonDecode(response.body);
+          return {'success': true, 'data': data};
+        } catch (e) {
+          return {
+            'success': false,
+            'error': 'Invalid response format from server'
+          };
+        }
+      }
+
+      // Attempt token refresh once on 401/403
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        if (isRetry) {
+          return {
+            'success': false,
+            'error': 'Authentication failed after retry. Please login again.'
+          };
+        }
+        final refreshResult = await _refreshToken();
+        if (refreshResult['success'] == true) {
+          return await askQuestion(question, isRetry: true);
+        }
         return {
           'success': false,
           'error': 'Authentication failed. Please login again.'
         };
-      } else {
+      }
+
+      // Other non-200 responses
+      try {
         final errorData = jsonDecode(response.body);
         return {
           'success': false,
-          'error': errorData['error'] ?? 'Failed to get answer'
+          'error': errorData['error'] ?? errorData['detail'] ?? 'Failed to get answer'
+        };
+      } catch (_) {
+        return {
+          'success': false,
+          'error': 'Failed to get answer: ${response.statusCode}'
         };
       }
+    } on TimeoutException {
+      // Dart TimeoutException message is often "Future not completed"
+      return {
+        'success': false,
+        'error': 'Request timed out. The server is still processing. Try again.'
+      };
     } catch (e) {
       return {'success': false, 'error': 'Error asking question: $e'};
     }
@@ -466,25 +511,27 @@ class ApiService {
       print('📝 Starting student registration...');
       print('📝 Registration URL: ${baseUrl}register/');
 
-      final response = await http.post(
-        Uri.parse('${baseUrl}register/'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'username': username,
-          'password': password,
-          'password_confirm': passwordConfirm,
-          'student_id': studentId,
-          'first_name': firstName,
-          'last_name': lastName,
-          'email': email,
-          'phone_number': phoneNumber,
-          'date_of_birth': dateOfBirth,
-          'department': department,
-          'year_of_study': yearOfStudy,
-        }),
-      ).timeout(Duration(seconds: 15));
+      final response = await http
+          .post(
+            Uri.parse('${baseUrl}register/'),
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'username': username,
+              'password': password,
+              'password_confirm': passwordConfirm,
+              'student_id': studentId,
+              'first_name': firstName,
+              'last_name': lastName,
+              'email': email,
+              'phone_number': phoneNumber,
+              'date_of_birth': dateOfBirth,
+              'department': department,
+              'year_of_study': yearOfStudy,
+            }),
+          )
+          .timeout(Duration(seconds: 15));
 
       print('📡 Registration response status: ${response.statusCode}');
       print('📡 Registration response body: ${response.body}');
@@ -496,8 +543,8 @@ class ApiService {
       } else {
         try {
           final errorData = jsonDecode(response.body);
-          final errorMsg = errorData['error'] ?? 
-              errorData['details'] ?? 
+          final errorMsg = errorData['error'] ??
+              errorData['details'] ??
               'Registration failed: ${response.statusCode}';
           print('❌ Registration failed: $errorMsg');
           return {'success': false, 'error': errorMsg};
@@ -523,7 +570,10 @@ class ApiService {
       };
     } catch (e) {
       print('❌ Unexpected registration error: $e');
-      return {'success': false, 'error': 'Unexpected error during registration: $e'};
+      return {
+        'success': false,
+        'error': 'Unexpected error during registration: $e'
+      };
     }
   }
 
@@ -585,14 +635,16 @@ class ApiService {
       if (department != null) updateData['department'] = department;
       if (yearOfStudy != null) updateData['year_of_study'] = yearOfStudy;
 
-      final response = await http.put(
-        Uri.parse('${baseUrl}profile/update/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(updateData),
-      ).timeout(Duration(seconds: 10));
+      final response = await http
+          .put(
+            Uri.parse('${baseUrl}profile/update/'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(updateData),
+          )
+          .timeout(Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         return {'success': true, 'data': jsonDecode(response.body)};

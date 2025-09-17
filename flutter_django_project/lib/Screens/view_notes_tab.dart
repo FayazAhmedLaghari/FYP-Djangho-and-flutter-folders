@@ -2,83 +2,172 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/dashboard_viewmodel.dart';
 import '../models/subject_model.dart';
+import '../ApiService.dart';
 
-class ViewNotesTab extends StatelessWidget {
+class ViewNotesTab extends StatefulWidget {
   final Subject subject;
 
   const ViewNotesTab({super.key, required this.subject});
 
   @override
+  State<ViewNotesTab> createState() => _ViewNotesTabState();
+}
+
+class _ViewNotesTabState extends State<ViewNotesTab> {
+  List<dynamic> _serverDocuments = [];
+  bool _isLoadingDocuments = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadServerDocuments();
+  }
+
+  Future<void> _loadServerDocuments() async {
+    setState(() {
+      _isLoadingDocuments = true;
+    });
+    final result = await ApiService.getDocuments();
+    if (!mounted) return;
+    setState(() {
+      _isLoadingDocuments = false;
+      if (result['success'] == true) {
+        _serverDocuments = result['data'] ?? [];
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<DashboardViewModel>(
       builder: (context, viewModel, child) {
-        final currentSubject = viewModel.getSubjectById(subject.id);
+        final currentSubject = viewModel.getSubjectById(widget.subject.id);
         final notes = currentSubject?.notes ?? [];
         final materials = currentSubject?.materials ?? [];
 
-        if (notes.isEmpty && materials.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.note_add,
-                  size: 80,
-                  color: Colors.grey.shade400,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  "No notes or materials yet",
-                  style: TextStyle(
-                    fontSize: 20,
-                    color: Colors.grey.shade600,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "Upload some content to get started",
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade500,
-                  ),
-                ),
-              ],
+        return Column(
+          children: [
+            // Server documents section (same source as HomeScreen)
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                children: [
+                  const Icon(Icons.cloud, color: Colors.deepPurple),
+                  const SizedBox(width: 8),
+                  const Text('Server Documents',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: 'Refresh',
+                    onPressed: _isLoadingDocuments ? null : _loadServerDocuments,
+                    icon: const Icon(Icons.refresh),
+                  )
+                ],
+              ),
             ),
-          );
-        }
-
-        return DefaultTabController(
-          length: 2,
-          child: Column(
-            children: [
-              Container(
-                color: Colors.grey.shade100,
-                child: const TabBar(
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.center,
-                  labelColor: Colors.deepPurple,
-                  unselectedLabelColor: Colors.grey,
-                  indicatorColor: Colors.deepPurple,
-                  tabs: [
-                    Tab(text: 'Notes'),
-                    Tab(text: 'Materials'),
-                  ],
-                ),
+            if (_isLoadingDocuments)
+              const LinearProgressIndicator(minHeight: 2),
+            SizedBox(
+              height: 160,
+              child: RefreshIndicator(
+                onRefresh: _loadServerDocuments,
+                child: _serverDocuments.isEmpty
+                    ? ListView(
+                        children: [
+                          const SizedBox(height: 40),
+                          Center(
+                            child: Text(
+                              'No documents yet. Use Dashboard → AI Chat to upload.',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        itemCount: _serverDocuments.length,
+                        itemBuilder: (context, index) {
+                          final doc = _serverDocuments[index];
+                          return Container(
+                            width: 260,
+                            margin: const EdgeInsets.only(right: 12),
+                            child: Card(
+                              elevation: 2,
+                              child: ListTile(
+                                leading: const Icon(Icons.picture_as_pdf,
+                                    color: Colors.red),
+                                title: Text(_getFileName(doc['file'] ?? ''),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                                subtitle: Text(
+                                  _formatDateString(doc['uploaded_at'] ?? ''),
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                trailing: doc['processed'] == true
+                                    ? const Icon(Icons.check_circle,
+                                        color: Colors.green)
+                                    : const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2),
+                                      ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
               ),
-              Expanded(
-                child: TabBarView(
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: DefaultTabController(
+                length: 2,
+                child: Column(
                   children: [
-                    _buildNotesList(notes, viewModel),
-                    _buildMaterialsList(materials, viewModel),
+                    Container(
+                      color: Colors.grey.shade100,
+                      child: const TabBar(
+                        isScrollable: true,
+                        tabAlignment: TabAlignment.center,
+                        labelColor: Colors.deepPurple,
+                        unselectedLabelColor: Colors.grey,
+                        indicatorColor: Colors.deepPurple,
+                        tabs: [
+                          Tab(text: 'Notes'),
+                          Tab(text: 'Materials'),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          _buildNotesList(notes, viewModel),
+                          _buildMaterialsList(materials, viewModel),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         );
       },
     );
+  }
+
+  String _getFileName(String filePath) {
+    return filePath.split('/').last;
+  }
+
+  String _formatDateString(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return dateString;
+    }
   }
 
   Widget _buildNotesList(
@@ -390,7 +479,7 @@ class ViewNotesTab extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              viewModel.removeNoteFromSubject(subject.id, note.id);
+              viewModel.removeNoteFromSubject(widget.subject.id, note.id);
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -420,7 +509,7 @@ class ViewNotesTab extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              viewModel.removeMaterialFromSubject(subject.id, material.id);
+              viewModel.removeMaterialFromSubject(widget.subject.id, material.id);
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(

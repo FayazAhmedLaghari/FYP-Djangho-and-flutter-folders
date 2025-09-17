@@ -19,7 +19,6 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     '192.168.43.11',  # Your PC's IP
 ]
-
 # Rest of your settings remain the same...
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -69,8 +68,16 @@ WSGI_APPLICATION = 'rag_django.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': os.getenv('MYSQL_DATABASE', 'rag_db'),
+        'USER': os.getenv('MYSQL_USER', 'root'),
+        'PASSWORD': os.getenv('MYSQL_PASSWORD', ''),
+        'HOST': os.getenv('MYSQL_HOST', '127.0.0.1'),
+        'PORT': os.getenv('MYSQL_PORT', '3306'),
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'"
+        }
     }
 }
 
