@@ -25,7 +25,6 @@ from django.core.exceptions import ObjectDoesNotExist
 import requests
 import tempfile
 import traceback
-
 # Check internet connection
 def check_internet_connection():
     try:
@@ -33,6 +32,29 @@ def check_internet_connection():
         return True
     except:
         return False
+
+# --- Unicode sanitization helper ---
+def _sanitize_text(value):
+    """
+    Remove surrogate code points and replace invalid sequences so the text
+    is safe for UTF-8 encoding, DB storage, and JSON serialization.
+    """
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        try:
+            value = str(value)
+        except Exception:
+            return ""
+    # Replace isolated surrogates and ensure valid UTF-8
+    # Encode with surrogatepass then decode ignoring invalids to drop any leftovers
+    try:
+        safe = value.encode('utf-8', 'surrogatepass').decode('utf-8', 'ignore')
+    except Exception:
+        # Fallback path if above fails for some reason
+        safe = value.encode('utf-8', 'ignore').decode('utf-8', 'ignore')
+    # Also normalize whitespace a bit
+    return safe.replace('\r\n', '\n').replace('\r', '\n')
 
 # Extract text from PDF - FIXED to handle Django FileField
 
@@ -58,12 +80,16 @@ def get_pdf_text(file_path):
             
             for page_num in range(len(pdf_reader.pages)):
                 page = pdf_reader.pages[page_num]
-                text += page.extract_text()
+                extracted = page.extract_text() or ""
+                # Sanitize page text to avoid surrogate errors
+                extracted = _sanitize_text(extracted)
+                text += extracted
                 
                 # Add page separator for better readability
                 if page_num < len(pdf_reader.pages) - 1:
                     text += "\n\n--- Page Break ---\n\n"
         
+        text = _sanitize_text(text)
         print(f"✅ Successfully extracted {len(text)} characters from PDF")
         return text
         
@@ -79,6 +105,7 @@ def get_pdf_text(file_path):
 
 # Split text into chunks
 def get_text_chunks(text):
+    text = _sanitize_text(text)
     if not text.strip():
         raise Exception("No text extracted from PDF.")
     
@@ -87,7 +114,8 @@ def get_text_chunks(text):
         chunk_overlap=1000
     )
     chunks = text_splitter.split_text(text)
-    return chunks
+    # Sanitize each chunk defensively
+    return [_sanitize_text(c) for c in chunks if isinstance(c, str)]
 
 # Create vector store
 def get_vector_store(text_chunks):
@@ -95,12 +123,14 @@ def get_vector_store(text_chunks):
         raise Exception("No text chunks to process.")
     
     try:
+        # Ensure all texts are sanitized to avoid any embedding/serialize issues
+        safe_texts = [_sanitize_text(t) for t in text_chunks]
         embeddings = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2",
             model_kwargs={'device': 'cpu'}
         )
         
-        vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
+        vector_store = FAISS.from_texts(safe_texts, embedding=embeddings)
         # Create directory if it doesn't exist
         os.makedirs(os.path.join(settings.BASE_DIR, "faiss_index"), exist_ok=True)
         vector_store.save_local(os.path.join(settings.BASE_DIR, "faiss_index"))
@@ -211,6 +241,7 @@ def upload_document(request):
             
             # FIX: Use the saved file path instead of the file object
             raw_text = get_pdf_text(document.file.path)  # Pass the file path
+            raw_text = _sanitize_text(raw_text)
             print(f"✅ Text extracted: {len(raw_text)} characters")
             
             print("✂️ Splitting text into chunks...")
@@ -220,6 +251,7 @@ def upload_document(request):
             # Save chunks to database
             print("💾 Saving chunks to database...")
             for i, chunk in enumerate(text_chunks):
+                chunk = _sanitize_text(chunk)
                 DocumentChunk.objects.create(
                     document=document,
                     chunk_text=chunk,

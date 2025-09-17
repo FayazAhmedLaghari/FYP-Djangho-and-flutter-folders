@@ -12,3 +12,4 @@ faiss-cpu==1.7.4
 python-dotenv==1.0.0
 requests==2.31.0
 mysqlclient==2.2.4
+huggingface_hub==0.16.4
