@@ -9,7 +9,6 @@ class HomeScreen extends StatefulWidget {
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
-
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _questionController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
@@ -25,13 +24,12 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isAskingQuestion = false;
   Map<String, dynamic>? _studentProfile;
   bool _isLoadingProfile = false;
-
   @override
   void initState() {
     super.initState();
     _checkLoginStatus();
   }
-
+  
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -663,10 +661,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 'Chat with PDF',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
-                  fontSize: 20,
+                  fontSize: 18,
                 ),
               ),
             ],
+
           ),
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
@@ -709,6 +708,7 @@ class _HomeScreenState extends State<HomeScreen> {
             length: 4,
             child: Column(
               children: [
+                // Fixed TabBar that won't overflow
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -767,7 +767,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-                Expanded(
+                // Flexible content area that adapts to keyboard
+                Flexible(
                   child: TabBarView(
                     children: [
                       _buildChatTab(),
@@ -797,111 +798,115 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      child: Column(
-        children: [
-          // Question Input Card - Fixed at top
-          Container(
-            padding: const EdgeInsets.all(16.0),
-            child: Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _questionController,
-                        decoration: InputDecoration(
-                          labelText: 'Ask a question about your PDFs',
-                          hintText: 'Type your question here...',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: Column(
+          children: [
+            // Question Input Card - Scrollable with keyboard
+            Container(
+              padding: const EdgeInsets.all(16.0),
+              child: Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _questionController,
+                          decoration: InputDecoration(
+                            labelText: 'Ask a question about your PDFs',
+                            hintText: 'Type your question here...',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.blue, width: 2),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.blue, width: 2),
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey.shade50,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          onSubmitted: (_) => _askQuestion(),
+                          enabled: !_isAskingQuestion,
+                          maxLines: null,
                         ),
-                        onSubmitted: (_) => _askQuestion(),
-                        enabled: !_isAskingQuestion,
-                        maxLines: null,
                       ),
-                    ),
-                    SizedBox(width: 12),
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.blue, Colors.blue.shade600],
+                      SizedBox(width: 12),
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Colors.blue, Colors.blue.shade600],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        borderRadius: BorderRadius.circular(12),
+                        child: IconButton(
+                          icon: Icon(Icons.send_rounded, color: Colors.white),
+                          onPressed: _isAskingQuestion ? null : _askQuestion,
+                          tooltip: 'Send Question',
+                        ),
                       ),
-                      child: IconButton(
-                        icon: Icon(Icons.send_rounded, color: Colors.white),
-                        onPressed: _isAskingQuestion ? null : _askQuestion,
-                        tooltip: 'Send Question',
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          
-          // Answer Section - Flexible to take remaining space
-          Expanded(
-            child: _isAskingQuestion
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                        ),
-                        SizedBox(height: 16),
-                        Text(
-                          'Thinking...',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
+            
+            // Answer Section - Scrollable content
+            Container(
+              constraints: BoxConstraints(
+                minHeight: MediaQuery.of(context).size.height * 0.4,
+              ),
+              child: _isAskingQuestion
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
                           ),
-                        ),
-                      ],
-                    ),
-                  )
-                : _answer.isNotEmpty
-                    ? Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 16.0),
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Colors.white,
-                                Colors.blue.shade50,
-                              ],
+                          SizedBox(height: 16),
+                          Text(
+                            'Thinking...',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(20.0),
-                            child: SingleChildScrollView(
+                        ],
+                      ),
+                    )
+                  : _answer.isNotEmpty
+                      ? Card(
+                          margin: const EdgeInsets.symmetric(horizontal: 16.0),
+                          elevation: 4,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Colors.white,
+                                  Colors.blue.shade50,
+                                ],
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(20.0),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -943,47 +948,47 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                           ),
+                        )
+                      : Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.blue.shade50,
+                                ),
+                                child: Icon(
+                                  Icons.chat_bubble_outline,
+                                  size: 40,
+                                  color: Colors.blue.shade300,
+                                ),
+                              ),
+                              SizedBox(height: 20),
+                              Text(
+                                'Ask a question to get started',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                'Upload PDF documents and start chatting!',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      )
-                    : Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.blue.shade50,
-                              ),
-                              child: Icon(
-                                Icons.chat_bubble_outline,
-                                size: 40,
-                                color: Colors.blue.shade300,
-                              ),
-                            ),
-                            SizedBox(height: 20),
-                            Text(
-                              'Ask a question to get started',
-                              style: TextStyle(
-                                fontSize: 20,
-                                color: Colors.grey.shade600,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Upload PDF documents and start chatting!',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -999,6 +1004,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             )
           : ListView.builder(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
               itemCount: _queryHistory.length,
               itemBuilder: (context, index) {
                 final query = _queryHistory[index];
@@ -1022,70 +1028,78 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildDocumentsTab() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: _isUploading
-              ? CircularProgressIndicator()
-              : ElevatedButton.icon(
-                  onPressed: _isUploading ? null : _uploadPdf,
-                  icon: Icon(Icons.upload_file),
-                  label: Text('Upload PDF'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: Size(double.infinity, 50),
-                  ),
-                ),
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _loadDocuments,
-            child: _documents.isEmpty
-                ? Center(
-                    child: Text(
-                      'No documents uploaded yet',
-                      style: TextStyle(fontSize: 18, color: Colors.grey),
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: _isUploading
+                ? CircularProgressIndicator()
+                : ElevatedButton.icon(
+                    onPressed: _isUploading ? null : _uploadPdf,
+                    icon: Icon(Icons.upload_file),
+                    label: Text('Upload PDF'),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: Size(double.infinity, 50),
                     ),
-                  )
-                : ListView.builder(
-                    itemCount: _documents.length,
-                    itemBuilder: (context, index) {
-                      final document = _documents[index];
-                      return Card(
-                        margin:
-                            EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                        child: ListTile(
-                          leading:
-                              Icon(Icons.picture_as_pdf, color: Colors.red),
-                          title: Text(_getFileName(document['file'] ?? '')),
-                          subtitle: Text(
-                            'Uploaded: ${_formatDate(document['uploaded_at'] ?? '')}',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              document['processed'] == true
-                                  ? Icon(Icons.check_circle,
-                                      color: Colors.green)
-                                  : CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                              SizedBox(width: 8),
-                              IconButton(
-                                icon: Icon(Icons.delete, color: Colors.red),
-                                onPressed: () =>
-                                    _showDeleteDialog(document['id']),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
                   ),
           ),
-        ),
-      ],
+          Container(
+            constraints: BoxConstraints(
+              minHeight: MediaQuery.of(context).size.height * 0.4,
+            ),
+            child: RefreshIndicator(
+              onRefresh: _loadDocuments,
+              child: _documents.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No documents uploaded yet',
+                        style: TextStyle(fontSize: 18, color: Colors.grey),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      physics: NeverScrollableScrollPhysics(),
+                      itemCount: _documents.length,
+                      itemBuilder: (context, index) {
+                        final document = _documents[index];
+                        return Card(
+                          margin:
+                              EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                          child: ListTile(
+                            leading:
+                                Icon(Icons.picture_as_pdf, color: Colors.red),
+                            title: Text(_getFileName(document['file'] ?? '')),
+                            subtitle: Text(
+                              'Uploaded: ${_formatDate(document['uploaded_at'] ?? '')}',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                document['processed'] == true
+                                    ? Icon(Icons.check_circle,
+                                        color: Colors.green)
+                                    : CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                SizedBox(width: 8),
+                                IconButton(
+                                  icon: Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () =>
+                                      _showDeleteDialog(document['id']),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1171,7 +1185,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 )
               : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: EdgeInsets.only(
+                    left: 16.0,
+                    right: 16.0,
+                    top: 16.0,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 16.0,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1309,6 +1328,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: _isLoggedIn ? _buildMainContent() : _buildLoginForm(),
     );
   }

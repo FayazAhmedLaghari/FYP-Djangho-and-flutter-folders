@@ -170,13 +170,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         // Show detailed error message
         String errorMessage = result['error'] ?? 'Registration failed';
         
-        // Handle specific error cases
+        // Handle specific error cases with more detailed messages
         if (errorMessage.contains('Username already exists')) {
           errorMessage = 'This username is already taken. Please choose a different one.';
         } else if (errorMessage.contains('Email already exists')) {
           errorMessage = 'This email is already registered. Please use a different email.';
         } else if (errorMessage.contains('Student ID already exists')) {
-          errorMessage = 'This Student ID is already registered. Please check your ID.';
+          errorMessage = 'Student ID "${_studentIdController.text.toUpperCase()}" is already registered. Please check your ID or contact support if this is an error.';
+        } else if (errorMessage.contains('Student ID must contain only uppercase letters and numbers')) {
+          errorMessage = 'Student ID must contain only uppercase letters and numbers (A-Z, 0-9).';
         }
         
         ScaffoldMessenger.of(context).showSnackBar(
@@ -370,19 +372,76 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         ],
                       ),
                       SizedBox(height: 16),
+                      // Student ID Warning Card
+                      Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          border: Border.all(color: Colors.amber.shade200),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning_amber, color: Colors.amber.shade700, size: 20),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Student ID must be unique. Double-check your ID before submitting.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.amber.shade800,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: 16),
                       TextFormField(
                         controller: _studentIdController,
+                        textCapitalization: TextCapitalization.characters,
                         decoration: InputDecoration(
                           labelText: 'Student ID *',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.badge),
+                          border: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.blue, width: 2),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.blue, width: 1.5),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.blue, width: 2),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red, width: 2),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red, width: 2),
+                          ),
+                          prefixIcon: Icon(Icons.badge, color: Colors.blue),
                           hintText: 'e.g., CS2023001',
+                          helperText: 'This ID must be unique and will be your primary identifier',
+                          helperMaxLines: 2,
+                          filled: true,
+                          fillColor: Colors.blue.shade50,
                         ),
+                        onChanged: (value) {
+                          // Auto-format to uppercase
+                          if (value != value.toUpperCase()) {
+                            _studentIdController.value = TextEditingValue(
+                              text: value.toUpperCase(),
+                              selection: TextSelection.collapsed(offset: value.length),
+                            );
+                          }
+                        },
                         validator: (value) {
                           if (value == null || value.isEmpty) {
                             return 'Please enter your student ID';
                           }
-                          if (!RegExp(r'^[A-Z0-9]+$').hasMatch(value.toUpperCase())) {
+                          if (value.length < 3) {
+                            return 'Student ID must be at least 3 characters';
+                          }
+                          if (!RegExp(r'^[A-Z0-9]+$').hasMatch(value)) {
                             return 'Student ID must contain only letters and numbers';
                           }
                           return null;
